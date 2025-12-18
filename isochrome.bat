@@ -4,9 +4,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 call :configure_codepage
 
 set "APP_NAME=IsoChrome Lite IDE"
-set "APP_VERSION=0.3.5"
+set "APP_VERSION=0.3.6"
 set "PROFILE_STORE=%~dp0profiles"
 set "QUICK_STORE=%PROFILE_STORE%\_quick"
+set "THEME_CONFIG=%QUICK_STORE%\theme.cfg"
+set "DEFAULT_THEME_ID=dark"
 set "BOOKMARKS_FILE=%~dp0bookmarks.txt"
 set "RECENT_LOG=%QUICK_STORE%\recent.log"
 set "MAX_RECENT=20"
@@ -16,9 +18,12 @@ set "SCRIPT_PATH=%~f0"
 
 call :ensure_profile_store
 call :ensure_quick_store
+call :ensure_theme_config
 call :ensure_bookmarks_file
 call :ensure_recent_log
 call :ensure_worker_store
+call :load_theme_config
+call :apply_theme "%CURRENT_THEME_ID%"
 
 if /i "%~1"=="--worker" (
     shift
@@ -31,6 +36,7 @@ cls
 echo ==================================================
 echo   %APP_NAME%
 echo   Версия: %APP_VERSION%
+echo   Тема:   !CURRENT_THEME_DESC!
 echo ==================================================
 echo   Лёгкая IDE для изоляции Chrome:
 echo     • Быстрая временная сессия без следов.
@@ -43,6 +49,7 @@ echo   3. Запустить существующий профиль
 echo   4. Удалить или очистить профиль
 echo   5. Показать список профилей
 echo   6. Управление закладками
+echo   7. Настройки темы интерфейса
 echo   0. Выход
 echo --------------------------------------------------
 set "MENU_CHOICE="
@@ -53,6 +60,7 @@ if "%MENU_CHOICE%"=="3" goto :launch_profile
 if "%MENU_CHOICE%"=="4" goto :delete_profile
 if "%MENU_CHOICE%"=="5" goto :show_profiles
 if "%MENU_CHOICE%"=="6" goto :bookmarks_menu
+if "%MENU_CHOICE%"=="7" goto :theme_menu
 if "%MENU_CHOICE%"=="0" goto :exit_success
 echo.
 echo %LOG_PREFIX% [Ошибка] Неизвестный пункт меню.
@@ -269,6 +277,36 @@ echo %LOG_PREFIX% [Ошибка] Неизвестный пункт меню.
 call :wait_for_key
 goto :bookmarks_menu
 
+:theme_menu
+cls
+echo %LOG_PREFIX% Настройки темы интерфейса
+echo --------------------------------------------------
+echo   Текущая тема: !CURRENT_THEME_DESC!
+echo --------------------------------------------------
+echo   1. Тёмная — чёрный фон, бирюзовый текст
+echo   2. Светлая — белый фон, чёрный текст
+echo   3. Неоновая — чёрный фон, жёлтый текст
+echo   0. Назад
+echo --------------------------------------------------
+set "THEME_CHOICE="
+set /p "THEME_CHOICE=Ваш выбор: "
+if "%THEME_CHOICE%"=="1" (
+    call :apply_and_save_theme dark
+    goto :theme_menu
+)
+if "%THEME_CHOICE%"=="2" (
+    call :apply_and_save_theme light
+    goto :theme_menu
+)
+if "%THEME_CHOICE%"=="3" (
+    call :apply_and_save_theme neon
+    goto :theme_menu
+)
+if "%THEME_CHOICE%"=="0" goto :main_menu
+echo %LOG_PREFIX% [Ошибка] Неизвестный пункт меню.
+call :wait_for_key
+goto :theme_menu
+
 :list_bookmarks
 set "BOOKMARK_COUNT=0"
 for /f "usebackq eol=# tokens=1,2 delims=|" %%I in ("%BOOKMARKS_FILE%") do (
@@ -388,6 +426,15 @@ call :load_bookmark_cache_simple
 if !BOOKMARK_COUNT! EQU 0 exit /b 1
 goto :select_bookmark_show_menu
 
+:apply_and_save_theme
+set "TARGET_THEME=%~1"
+if not defined TARGET_THEME set "TARGET_THEME=%DEFAULT_THEME_ID%"
+call :apply_theme "%TARGET_THEME%"
+call :save_theme_config "%CURRENT_THEME_ID%"
+echo %LOG_PREFIX% [OK] Тема переключена на "!CURRENT_THEME_DESC!".
+timeout /t 1 >nul
+exit /b 0
+
 :select_recent_url
 set "RECENT_RESULT=%~1"
 set "%RECENT_RESULT%="
@@ -407,6 +454,61 @@ set /p "RECENT_SELECTION=Номер URL: "
 call :resolve_recent_selection "!RECENT_SELECTION!" RECENT_INDEX
 if errorlevel 1 exit /b 1
 for %%U in ("!RECENT_URL_%RECENT_INDEX%!") do set "%RECENT_RESULT%=%%~U"
+exit /b 0
+
+:load_theme_config
+set "CURRENT_THEME_ID="
+if exist "%THEME_CONFIG%" (
+    for /f "usebackq tokens=1* delims==" %%I in ("%THEME_CONFIG%") do (
+        if /i "%%~I"=="THEME_ID" set "CURRENT_THEME_ID=%%~J"
+    )
+)
+if not defined CURRENT_THEME_ID set "CURRENT_THEME_ID=%DEFAULT_THEME_ID%"
+exit /b 0
+
+:save_theme_config
+set "SAVE_THEME_ID=%~1"
+if not defined SAVE_THEME_ID set "SAVE_THEME_ID=%DEFAULT_THEME_ID%"
+> "%THEME_CONFIG%" (
+    echo THEME_ID=%SAVE_THEME_ID%
+)
+exit /b 0
+
+:ensure_theme_config
+if not exist "%QUICK_STORE%" mkdir "%QUICK_STORE%" >nul 2>&1
+if not exist "%THEME_CONFIG%" (
+    call :save_theme_config "%DEFAULT_THEME_ID%"
+)
+exit /b 0
+
+:apply_theme
+set "REQUESTED_THEME=%~1"
+if not defined REQUESTED_THEME set "REQUESTED_THEME=%DEFAULT_THEME_ID%"
+if /i "%REQUESTED_THEME%"=="dark" (
+    set "CURRENT_THEME_ID=dark"
+    set "CURRENT_THEME_DESC=Тёмная — чёрный фон, бирюзовый текст"
+    color 0B
+    exit /b 0
+)
+if /i "%REQUESTED_THEME%"=="light" (
+    set "CURRENT_THEME_ID=light"
+    set "CURRENT_THEME_DESC=Светлая — белый фон, чёрный текст"
+    color F0
+    exit /b 0
+)
+if /i "%REQUESTED_THEME%"=="neon" (
+    set "CURRENT_THEME_ID=neon"
+    set "CURRENT_THEME_DESC=Неоновая — чёрный фон, жёлтый текст"
+    color 0E
+    exit /b 0
+)
+if /i not "%REQUESTED_THEME%"=="%DEFAULT_THEME_ID%" (
+    call :apply_theme "%DEFAULT_THEME_ID%"
+) else (
+    set "CURRENT_THEME_ID=%DEFAULT_THEME_ID%"
+    set "CURRENT_THEME_DESC=Тёмная — чёрный фон, бирюзовый текст"
+    color 0B
+)
 exit /b 0
 
 :list_profiles_with_cache
