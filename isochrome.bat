@@ -4,7 +4,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 call :configure_codepage
 
 set "APP_NAME=IsoChrome Lite IDE"
-set "APP_VERSION=0.3.0"
+set "APP_VERSION=0.3.5"
 set "PROFILE_STORE=%~dp0profiles"
 set "QUICK_STORE=%PROFILE_STORE%\_quick"
 set "BOOKMARKS_FILE=%~dp0bookmarks.txt"
@@ -32,6 +32,11 @@ echo ==================================================
 echo   %APP_NAME%
 echo   Версия: %APP_VERSION%
 echo ==================================================
+echo   Лёгкая IDE для изоляции Chrome:
+echo     • Быстрая временная сессия без следов.
+echo     • Создание и запуск персональных профилей.
+echo     • Хранение закладок и истории запусков.
+echo --------------------------------------------------
 echo   1. Быстрая изолированная сессия (временный профиль)
 echo   2. Создать постоянный профиль
 echo   3. Запустить существующий профиль
@@ -76,19 +81,24 @@ echo        Путь:       !PROFILE_DIR!
 if not exist "!PROFILE_DIR!" mkdir "!PROFILE_DIR!" >nul 2>&1
 
 echo %LOG_PREFIX% Запускаем изолированную сессию...
-echo %LOG_PREFIX% [DEBUG] Прямой запуск Chrome без воркера
 if defined SESSION_URL (
-    echo %LOG_PREFIX% [DEBUG] Запускаю Chrome с URL: !SESSION_URL!
-    echo %LOG_PREFIX% [DEBUG] Профиль: !PROFILE_DIR!
-    echo %LOG_PREFIX% [DEBUG] Chrome: !CHROME_EXE!
+    echo        URL:      !SESSION_URL!
+) else (
+    echo        URL:      (не задан, стартовая вкладка Chrome)
+)
+echo        Профиль: !PROFILE_DIR!
+echo        Chrome:   !CHROME_EXE!
+if defined SESSION_URL (
     start "" "!CHROME_EXE!" --new-window --user-data-dir="!PROFILE_DIR!" "!SESSION_URL!"
 ) else (
-    echo %LOG_PREFIX% [DEBUG] Запускаю Chrome без URL
-    echo %LOG_PREFIX% [DEBUG] Профиль: !PROFILE_DIR!
-    echo %LOG_PREFIX% [DEBUG] Chrome: !CHROME_EXE!
     start "" "!CHROME_EXE!" --new-window --user-data-dir="!PROFILE_DIR!"
 )
 echo %LOG_PREFIX% Сессия запущена. Профиль будет удалён после закрытия Chrome.
+echo --------------------------------------------------
+echo   Инструкция:
+echo     • Работайте в открывшемся окне Chrome.
+echo     • Закройте окно, чтобы удалить временный профиль.
+echo --------------------------------------------------
 echo.
 if defined SESSION_URL (
     call :log_recent_url "quick" "!SESSION_URL!"
@@ -137,7 +147,8 @@ if !PROFILE_COUNT! EQU 0 (
     goto :main_menu
 )
 set "PROFILE_SELECTION="
-set /p "PROFILE_SELECTION=Введите номер профиля: "
+set /p "PROFILE_SELECTION=Введите номер профиля (0 = назад): "
+if "%PROFILE_SELECTION%"=="0" goto :main_menu
 call :resolve_profile_selection "!PROFILE_SELECTION!" SELECTED_PROFILE
 if errorlevel 1 (
     call :wait_for_key
@@ -176,7 +187,8 @@ if !PROFILE_COUNT! EQU 0 (
     goto :main_menu
 )
 set "PROFILE_SELECTION="
-set /p "PROFILE_SELECTION=Введите номер профиля: "
+set /p "PROFILE_SELECTION=Введите номер профиля (0 = назад): "
+if "%PROFILE_SELECTION%"=="0" goto :main_menu
 call :resolve_profile_selection "!PROFILE_SELECTION!" SELECTED_PROFILE
 if errorlevel 1 (
     call :wait_for_key
@@ -334,7 +346,6 @@ exit /b 0
 :select_bookmark_url
 set "BOOKMARK_RESULT=%~1"
 set "%BOOKMARK_RESULT%="
-echo %LOG_PREFIX% [DEBUG] Начинаем выбор закладки
 call :load_bookmark_cache_simple
 set "BOOKMARK_TOTAL=!BOOKMARK_COUNT!"
 if not defined BOOKMARK_TOTAL goto :select_bookmark_no_entries
@@ -416,6 +427,8 @@ for /d %%D in ("%PROFILE_STORE%\*") do (
 )
 if !PROFILE_COUNT! EQU 0 (
     echo   (пока нет сохранённых профилей)
+) else (
+    echo   0. Вернуться назад
 )
 exit /b 0
 
@@ -571,66 +584,16 @@ exit /b 0
 :load_bookmark_cache_simple
 call :reset_bookmark_cache
 if not exist "%BOOKMARKS_FILE%" exit /b 0
-echo %LOG_PREFIX% [DEBUG SIMPLE] Загружаем закладки из файла: %BOOKMARKS_FILE%
 set "BOOKMARK_COUNT=0"
 for /f "usebackq eol=# tokens=1* delims=|" %%I in ("%BOOKMARKS_FILE%") do (
     set "LINE_NAME=%%~I"
     set "LINE_URL=%%~J"
-    echo %LOG_PREFIX% [DEBUG SIMPLE] Обрабатываем: NAME='!LINE_NAME!' URL='!LINE_URL!'
     if not "!LINE_NAME!"=="" if not "!LINE_URL!"=="" (
         set /a BOOKMARK_COUNT+=1
         set "BOOKMARK_NAME_!BOOKMARK_COUNT!=!LINE_NAME!"
         set "BOOKMARK_URL_!BOOKMARK_COUNT!=!LINE_URL!"
-        echo %LOG_PREFIX% [DEBUG SIMPLE] Добавлена закладка !BOOKMARK_COUNT!: !LINE_NAME! - !LINE_URL!
-    ) else (
-        echo %LOG_PREFIX% [DEBUG SIMPLE] Пропускаем пустую строку
     )
 )
-echo %LOG_PREFIX% [DEBUG SIMPLE] Всего закладок загружено: !BOOKMARK_COUNT!
-exit /b 0
-
-:load_bookmark_cache_v2
-call :reset_bookmark_cache
-if not exist "%BOOKMARKS_FILE%" exit /b 0
-echo %LOG_PREFIX% [DEBUG V2] Загружаем закладки из файла: %BOOKMARKS_FILE%
-set "BOOKMARK_LINE_NUM=0"
-for /f "usebackq eol=# tokens=1* delims=|" %%I in ("%BOOKMARKS_FILE%") do (
-    set /a BOOKMARK_LINE_NUM+=1
-    set "LINE_NAME=%%~I"
-    set "LINE_URL=%%~J"
-    echo %LOG_PREFIX% [DEBUG V2] Строка !BOOKMARK_LINE_NUM!: NAME='!LINE_NAME!' URL='!LINE_URL!'
-    if not "!LINE_NAME!"=="" if not "!LINE_URL!"=="" (
-        set /a BOOKMARK_COUNT+=1
-        set "BOOKMARK_NAME_!BOOKMARK_COUNT!=!LINE_NAME!"
-        set "BOOKMARK_URL_!BOOKMARK_COUNT!=!LINE_URL!"
-        echo %LOG_PREFIX% [DEBUG V2] Добавлена закладка !BOOKMARK_COUNT!: !LINE_NAME! - !LINE_URL!
-    ) else (
-        echo %LOG_PREFIX% [DEBUG V2] Пропускаем пустую строку
-    )
-)
-echo %LOG_PREFIX% [DEBUG V2] Всего закладок загружено: !BOOKMARK_COUNT!
-exit /b 0
-
-:load_bookmark_cache
-call :reset_bookmark_cache
-if not exist "%BOOKMARKS_FILE%" exit /b 0
-echo %LOG_PREFIX% [DEBUG] Загружаем закладки из файла: %BOOKMARKS_FILE%
-set "BOOKMARK_LINE_NUM=0"
-for /f "usebackq eol=# tokens=1* delims=|" %%I in ("%BOOKMARKS_FILE%") do (
-    set /a BOOKMARK_LINE_NUM+=1
-    set "LINE_NAME=%%~I"
-    set "LINE_URL=%%~J"
-    echo %LOG_PREFIX% [DEBUG] Строка !BOOKMARK_LINE_NUM!: NAME='!LINE_NAME!' URL='!LINE_URL!'
-    if not "!LINE_NAME!"=="" if not "!LINE_URL!"=="" (
-        set /a BOOKMARK_COUNT+=1
-        set "BOOKMARK_NAME_!BOOKMARK_COUNT!=!LINE_NAME!"
-        set "BOOKMARK_URL_!BOOKMARK_COUNT!=!LINE_URL!"
-        echo %LOG_PREFIX% [DEBUG] Добавлена закладка !BOOKMARK_COUNT!: !LINE_NAME! - !LINE_URL!
-    ) else (
-        echo %LOG_PREFIX% [DEBUG] Пропускаем пустую строку
-    )
-)
-echo %LOG_PREFIX% [DEBUG] Всего закладок загружено: !BOOKMARK_COUNT!
 exit /b 0
 
 :reset_bookmark_cache
@@ -776,116 +739,6 @@ if defined ORIGINAL_CP (
 )
 exit /b 0
 
-:test_bookmarks_loading
-echo %LOG_PREFIX% Тестирование загрузки закладок
-set "TEST_BOOKMARKS_FILE=%~dp0bookmarks_test.txt"
-echo %LOG_PREFIX% Тестовый файл: %TEST_BOOKMARKS_FILE%
-if not exist "%TEST_BOOKMARKS_FILE%" (
-    echo %LOG_PREFIX% [Ошибка] Тестовый файл не найден
-    exit /b 1
-)
-echo %LOG_PREFIX% Содержимое тестового файла:
-type "%TEST_BOOKMARKS_FILE%"
-echo.
-echo %LOG_PREFIX% Тестируем загрузку:
-set "TEST_COUNT=0"
-for /f "usebackq tokens=1* delims=|" %%I in ("%TEST_BOOKMARKS_FILE%") do (
-    set "TEST_NAME=%%~I"
-    set "TEST_URL=%%~J"
-    echo %LOG_PREFIX% [TEST] NAME='!TEST_NAME!' URL='!TEST_URL!'
-    if not "!TEST_NAME!"=="" if not "!TEST_URL!"=="" (
-        set /a TEST_COUNT+=1
-        echo %LOG_PREFIX% [TEST] Добавлена закладка !TEST_COUNT!: !TEST_NAME! - !TEST_URL!
-    )
-)
-echo %LOG_PREFIX% [TEST] Всего закладок в тесте: !TEST_COUNT!
-exit /b 0
-
-:test_main_bookmarks_file
-echo %LOG_PREFIX% Тестирование основного файла закладок
-echo %LOG_PREFIX% Файл: %BOOKMARKS_FILE%
-if not exist "%BOOKMARKS_FILE%" (
-    echo %LOG_PREFIX% [Ошибка] Основной файл закладок не найден
-    exit /b 1
-)
-echo %LOG_PREFIX% Содержимое основного файла закладок:
-type "%BOOKMARKS_FILE%"
-echo.
-echo %LOG_PREFIX% Тестируем загрузку из основного файла:
-set "TEST_COUNT=0"
-for /f "usebackq eol=# tokens=1* delims=|" %%I in ("%BOOKMARKS_FILE%") do (
-    set "TEST_NAME=%%~I"
-    set "TEST_URL=%%~J"
-    echo %LOG_PREFIX% [TEST MAIN] NAME='!TEST_NAME!' URL='!TEST_URL!'
-    if not "!TEST_NAME!"=="" if not "!TEST_URL!"=="" (
-        set /a TEST_COUNT+=1
-        echo %LOG_PREFIX% [TEST MAIN] Добавлена закладка !TEST_COUNT!: !TEST_NAME! - !TEST_URL!
-    )
-)
-echo %LOG_PREFIX% [TEST MAIN] Всего закладок в основном файле: !TEST_COUNT!
-exit /b 0
-
-:test_simple_bookmarks
-echo %LOG_PREFIX% Тестирование простой загрузки закладок
-set "TEST_FILE=%~dp0bookmarks_test_simple.txt"
-echo %LOG_PREFIX% Тестовый файл: %TEST_FILE%
-if not exist "%TEST_FILE%" (
-    echo %LOG_PREFIX% [Ошибка] Тестовый файл не найден
-    exit /b 1
-)
-echo %LOG_PREFIX% Содержимое тестового файла:
-type "%TEST_FILE%"
-echo.
-echo %LOG_PREFIX% Тестируем загрузку:
-set "TEST_COUNT=0"
-for /f "usebackq eol=# tokens=1* delims=|" %%I in ("%TEST_FILE%") do (
-    set "TEST_NAME=%%~I"
-    set "TEST_URL=%%~J"
-    echo %LOG_PREFIX% [TEST SIMPLE] NAME='!TEST_NAME!' URL='!TEST_URL!'
-    if not "!TEST_NAME!"=="" if not "!TEST_URL!"=="" (
-        set /a TEST_COUNT+=1
-        echo %LOG_PREFIX% [TEST SIMPLE] Добавлена закладка !TEST_COUNT!: !TEST_NAME! - !TEST_URL!
-    )
-)
-echo %LOG_PREFIX% [TEST SIMPLE] Всего закладок в тесте: !TEST_COUNT!
-exit /b 0
-
-:test_minimal_bookmarks
-echo %LOG_PREFIX% Минимальный тест закладок
-echo %LOG_PREFIX% Создаем тестовый файл с закладками
-echo Test1^|https://test1.com > "%~dp0bookmarks_minimal.txt"
-echo Test2^|https://test2.com >> "%~dp0bookmarks_minimal.txt"
-echo %LOG_PREFIX% Тестовый файл создан
-type "%~dp0bookmarks_minimal.txt"
-echo.
-echo %LOG_PREFIX% Тестируем загрузку из файла:
-set "MINIMAL_COUNT=0"
-for /f "usebackq tokens=1* delims=|" %%I in ("%~dp0bookmarks_minimal.txt") do (
-    set "MINIMAL_NAME=%%~I"
-    set "MINIMAL_URL=%%~J"
-    echo %LOG_PREFIX% [MINIMAL] NAME='!MINIMAL_NAME!' URL='!MINIMAL_URL!'
-    if not "!MINIMAL_NAME!"=="" if not "!MINIMAL_URL!"=="" (
-        set /a MINIMAL_COUNT+=1
-        echo %LOG_PREFIX% [MINIMAL] Добавлена закладка !MINIMAL_COUNT!: !MINIMAL_NAME! - !MINIMAL_URL!
-    )
-)
-echo %LOG_PREFIX% [MINIMAL] Всего закладок в тесте: !MINIMAL_COUNT!
-exit /b 0
-
-:test_variable_scope
-echo %LOG_PREFIX% Тест области видимости переменных
-echo %LOG_PREFIX% Устанавливаем переменную TEST_VAR=Hello
-set "TEST_VAR=Hello"
-echo %LOG_PREFIX% Вызываем функцию test_function
-call :test_function
-echo %LOG_PREFIX% После вызова функции TEST_VAR=!TEST_VAR!
-exit /b 0
-
-:test_function
-echo %LOG_PREFIX% В функции test_function, TEST_VAR=!TEST_VAR!
-set "TEST_VAR=World"
-echo %LOG_PREFIX% Изменили TEST_VAR на World
-exit /b 0
 
 :ensure_worker_store
 if not exist "%WORKER_STORE%" mkdir "%WORKER_STORE%" >nul 2>&1
